@@ -32,7 +32,8 @@
                     <th>التصنيف</th>
                     <th>الباركود</th>
                     <th>سعر الشراء</th>
-                    <th>سعر البيع</th>
+                    <th>سعر القطاعي</th>
+                    <th>سعر الجملة</th>
                     <th>المخزون المتوفر</th>
                     <th class="w-1 text-center">الإجراءات</th>
                 </tr>
@@ -45,6 +46,9 @@
                         <td><code>{{ $product->barcode ?? 'N/A' }}</code></td>
                         <td>{{ number_format($product->cost_price, 2) }}</td>
                         <td class="fw-bold text-success">{{ number_format($product->selling_price, 2) }}</td>
+                        <td class="fw-bold text-info">
+                            {{ $product->wholesale_price ? number_format($product->wholesale_price, 2) : '-' }}
+                        </td>
                         <td>
                             @php
                                 $totalQty = $product->branches->sum('pivot.quantity');
@@ -71,7 +75,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">لا توجد منتجات مضافة حتى الآن</td>
+                        <td colspan="8" class="text-center text-muted py-4">لا توجد منتجات مضافة حتى الآن</td>
                     </tr>
                 @endforelse
             </tbody>

@@ -24,24 +24,25 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id',
-            'barcode' => 'nullable|string|unique:products,barcode',
-            'cost_price' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
-            'unit' => 'required|string',
-            'quantity' => 'required|integer|min:0',
-            'alert_quantity' => 'nullable|integer|min:1',
+            'name'            => 'required|string|max:255',
+            'category_id'     => 'required|exists:categories,id',
+            'barcode'         => 'nullable|string|unique:products,barcode',
+            'cost_price'      => 'required|numeric|min:0',
+            'selling_price'   => 'required|numeric|min:0',
+            'wholesale_price' => 'nullable|numeric|min:0',
+            'unit'            => 'required|string',
+            'quantity'        => 'required|integer|min:0',
+            'alert_quantity'  => 'nullable|integer|min:1',
         ]);
 
         $product = Product::create($request->only([
-            'name', 'category_id', 'sku', 'barcode', 'cost_price', 'selling_price', 'unit'
+            'name', 'category_id', 'sku', 'barcode', 'cost_price', 'selling_price', 'wholesale_price', 'unit'
         ]));
 
         $mainBranch = Branch::first();
         if ($mainBranch) {
             $product->branches()->attach($mainBranch->id, [
-                'quantity' => $request->quantity,
+                'quantity'       => $request->quantity,
                 'alert_quantity' => $request->alert_quantity ?? 5,
             ]);
         }
@@ -65,25 +66,26 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id',
-            'barcode' => 'nullable|string|unique:products,barcode,' . $product->id,
-            'cost_price' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
-            'unit' => 'required|string',
-            'quantity' => 'required|integer|min:0',
-            'alert_quantity' => 'nullable|integer|min:1',
+            'name'            => 'required|string|max:255',
+            'category_id'     => 'required|exists:categories,id',
+            'barcode'         => 'nullable|string|unique:products,barcode,' . $product->id,
+            'cost_price'      => 'required|numeric|min:0',
+            'selling_price'   => 'required|numeric|min:0',
+            'wholesale_price' => 'nullable|numeric|min:0',
+            'unit'            => 'required|string',
+            'quantity'        => 'required|integer|min:0',
+            'alert_quantity'  => 'nullable|integer|min:1',
         ]);
 
         $product->update($request->only([
-            'name', 'category_id', 'sku', 'barcode', 'cost_price', 'selling_price', 'unit'
+            'name', 'category_id', 'sku', 'barcode', 'cost_price', 'selling_price', 'wholesale_price', 'unit'
         ]));
 
         $mainBranch = Branch::first();
         if ($mainBranch) {
             $product->branches()->syncWithoutDetaching([
                 $mainBranch->id => [
-                    'quantity' => $request->quantity,
+                    'quantity'       => $request->quantity,
                     'alert_quantity' => $request->alert_quantity ?? 5,
                 ]
             ]);     

@@ -15,7 +15,7 @@
 </div>
 
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-9">
         <form action="{{ route('products.update', $product) }}" method="POST">
             @csrf
             @method('PUT')
@@ -50,24 +50,31 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label required">سعر الشراء</label>
                             <input type="number" step="0.01" name="cost_price" class="form-control @error('cost_price') is-invalid @enderror" value="{{ old('cost_price', $product->cost_price) }}" required>
                             @error('cost_price') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label required">سعر البيع</label>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label required">سعر البيع (قطاعي)</label>
                             <input type="number" step="0.01" name="selling_price" class="form-control @error('selling_price') is-invalid @enderror" value="{{ old('selling_price', $product->selling_price) }}" required>
                             @error('selling_price') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">سعر البيع (جملة)</label>
+                            <input type="number" step="0.01" name="wholesale_price" class="form-control @error('wholesale_price') is-invalid @enderror" value="{{ old('wholesale_price', $product->wholesale_price) }}" placeholder="اختياري">
+                            @error('wholesale_price') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-3 mb-3">
                             <label class="form-label required">الوحدة</label>
                             <select name="unit" class="form-select" required>
                                 <option value="قطعة" {{ old('unit', $product->unit) == 'قطعة' ? 'selected' : '' }}>قطعة</option>
-                                <option value="كيلو" {{ old('unit', $product->unit) == 'كيلو' ? 'selected' : '' }}>كيلو</option>
+                                <option value="صندوق" {{ old('unit', $product->unit) == 'صندوق' ? 'selected' : '' }}>صندوق</option>
                                 <option value="طرد" {{ old('unit', $product->unit) == 'طرد' ? 'selected' : '' }}>طرد</option>
+                                <option value="كيلو" {{ old('unit', $product->unit) == 'كيلو' ? 'selected' : '' }}>كيلو</option>
                                 <option value="لتر" {{ old('unit', $product->unit) == 'لتر' ? 'selected' : '' }}>لتر</option>
                             </select>
                         </div>
@@ -78,13 +85,13 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label required">الكمية المتوفرة</label>
-                            <input type="number" name="quantity" class="form-control @error('quantity') is-invalid @enderror" value="{{ old('quantity', $quantity) }}" min="0" required>
+                            <input type="number" name="quantity" class="form-control @error('quantity') is-invalid @enderror" value="{{ old('quantity', $quantity ?? $product->quantity) }}" min="0" required>
                             @error('quantity') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label class="form-label">حد التنبيه بنقص المخزون</label>
-                            <input type="number" name="alert_quantity" class="form-control @error('alert_quantity') is-invalid @enderror" value="{{ old('alert_quantity', $alertQuantity) }}" min="1">
+                            <input type="number" name="alert_quantity" class="form-control @error('alert_quantity') is-invalid @enderror" value="{{ old('alert_quantity', $alertQuantity ?? $product->alert_quantity) }}" min="1">
                             @error('alert_quantity') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                     </div>

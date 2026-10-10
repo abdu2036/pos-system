@@ -13,17 +13,28 @@ class CategoryController extends Controller
         return view('admin.categories.index', compact('categories'));
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-        ]);
+  public function store(Request $request)
+{
+    $request->validate([
+        'name' => 'required|string|max:255|unique:categories,name',
+    ], [
+        'name.unique' => 'هذا التصنيف موجود بالفعل!',
+    ]);
 
-        Category::create($request->only('name', 'description'));
+    $category = Category::create([
+        'name' => $request->name,
+    ]);
 
-        return redirect()->back()->with('success', 'تم إضافة التصنيف بنجاح');
+    if ($request->wantsJson() || $request->ajax()) {
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إضافة التصنيف بنجاح',
+            'category' => $category
+        ], 200);
     }
+
+    return redirect()->back()->with('success', 'تم إضافة التصنيف بنجاح');
+}
 
     public function update(Request $request, Category $category)
     {

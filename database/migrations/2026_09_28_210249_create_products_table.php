@@ -14,7 +14,7 @@ return new class extends Migration
     Schema::create('products', function (Blueprint $table) {
         $table->id();
         $table->foreignId('category_id')->constrained()->onDelete('cascade');
-        $table->string('name');
+        $table->string('name')->unique();
         $table->string('sku')->unique()->nullable(); // رمز المنتج
         $table->string('barcode')->unique()->nullable(); // الباركود
         $table->decimal('cost_price', 10, 2)->default(0); // سعر الشراء
@@ -22,6 +22,7 @@ return new class extends Migration
         $table->string('unit')->default('piece'); // الوحدة (حبة، كيلو، طرد)
         $table->boolean('status')->default(true);
         $table->timestamps();
+        
     });
 
     // جدول كميات المنتجات حسب كل فرع

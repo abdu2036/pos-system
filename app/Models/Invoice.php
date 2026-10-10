@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,20 +11,35 @@ class Invoice extends Model
 
     protected $fillable = [
         'invoice_number',
+        'customer_id',
         'branch_id',
         'total_amount',
         'paid_amount',
         'change_amount',
-        'payment_method'
+        'payment_method',
     ];
 
-    public function items()
+    /**
+     * علاقة الفاتورة بالزبون
+     */
+    public function customer()
     {
-        return $this->hasMany(InvoiceItem::class);
+        return $this->belongsTo(Customer::class);
     }
 
+    /**
+     * علاقة الفاتورة بالفرع
+     */
     public function branch()
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    /**
+     * علاقة الفاتورة بعناصر الفاتورة (المنتجات المباعة)
+     */
+    public function items()
+    {
+        return $this->hasMany(InvoiceItem::class);
     }
 }

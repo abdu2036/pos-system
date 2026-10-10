@@ -16,7 +16,7 @@ return new class extends Migration
                   ->constrained('company_settings')
                   ->cascadeOnDelete();
 
-            $table->string('name');                      // اسم الفرع
+            $table->string('name')->unique();                      // اسم الفرع
             $table->string('code')->unique();            // كود الفرع
             $table->string('phone')->nullable();         // هاتف الفرع
             $table->text('address')->nullable();          // عنوان الفرع

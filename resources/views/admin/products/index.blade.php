@@ -54,7 +54,7 @@
                                 $totalQty = $product->branches->sum('pivot.quantity');
                                 $alertQty = $product->branches->first()->pivot->alert_quantity ?? 5;
                             @endphp
-                            <span class="badge {{ $totalQty <= $alertQty ? 'bg-danger' : 'bg-blue' }} fs-6">
+                            <span class="badge bg-blue text-white fw-bold {{ $totalQty <= $alertQty ? 'bg-danger' : 'bg-blue' }} fs-6">
                                 {{ $totalQty }} {{ $product->unit }}
                             </span>
                         </td>

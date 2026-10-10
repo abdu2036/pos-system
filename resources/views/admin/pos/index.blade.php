@@ -1,6 +1,51 @@
 @extends('layouts.app')
 
 @section('content')
+
+<!-- SweetAlert2 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    .badge-shortcut {
+        background-color: #206bc4;
+        color: #fff;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 0.8rem;
+    }
+</style>
+
+<!-- شريط إظهار الاختصارات -->
+<div class="card mb-2 shadow-sm border-0 bg-white">
+    <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 text-dark fs-6">
+            <div class="d-flex align-items-center gap-1">
+                <span class="badge-shortcut">F2</span>
+                <span class="fw-semibold">البحث بالباركود / الاسم</span>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="badge-shortcut">F4</span>
+                <span class="fw-semibold">تبديل (نقدي / آجل)</span>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="badge-shortcut bg-success">F8</span>
+                <span class="fw-semibold">إنهاء الفاتورة والطباعة</span>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="badge-shortcut bg-warning text-dark">F5</span>
+                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#modal-recent-invoices">
+                    سجل الفواتير الأخيرة 📜
+                </button>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <span class="badge-shortcut bg-danger">F9</span>
+                <span class="fw-semibold">إلغاء الفاتورة الحالية</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <!-- قائمة المنتجات (اليسار) -->
     <div class="col-md-7">
@@ -95,7 +140,7 @@
                 </div>
                 <!-- رصيد الزبون إن وجد -->
                 <div id="customer-balance-info" class="mt-1 d-none fs-6 text-muted">
-                    الرصيد السارق/السابق للزبون: <span id="customer-balance" class="fw-bold text-dark">0.00 د.ل</span>
+                    الرصيد السابق للزبون: <span id="customer-balance" class="fw-bold text-dark">0.00 د.ل</span>
                 </div>
             </div>
 
@@ -149,9 +194,73 @@
                     </div>
 
                     <button class="btn btn-success btn-lg w-100 py-2 fs-2 fw-bold" onclick="processCheckout()">
-                        ✓ إنهاء الفاتورة وطباعة
+                        ✓ إنهاء الفاتورة وطباعة (F8)
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal الفواتير السابقة وطباعتها المباشرة (F5) -->
+<div class="modal fade" id="modal-recent-invoices" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title text-white">📜 سجل الفواتير الأخيرة (طباعة / إرجاع)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
+                    <table class="table table-vcenter table-striped card-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>رقم الفاتورة</th>
+                                <th>الزبون</th>
+                                <th>الإجمالي</th>
+                                <th>طريقة الدفع</th>
+                                <th>التاريخ</th>
+                                <th class="text-center">العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if(isset($recentInvoices) && count($recentInvoices) > 0)
+                                @foreach($recentInvoices as $inv)
+                                    <tr>
+                                        <td class="fw-bold text-primary">{{ $inv->invoice_number }}</td>
+                                        <td>{{ $inv->customer->name ?? 'زبون نقدي' }}</td>
+                                        <td class="fw-bold">{{ number_format($inv->total_amount, 2) }} د.ل</td>
+                                        <td>
+                                            <span class="badge {{ $inv->payment_method === 'credit' ? 'bg-warning text-dark' : 'bg-success text-white' }}">
+                                                {{ $inv->payment_method === 'credit' ? 'آجل' : 'نقداً' }}
+                                            </span>
+                                        </td>
+                                        <td class="text-muted fs-6">{{ $inv->created_at->format('Y-m-d H:i') }}</td>
+                                        <td class="text-center">
+                                            <a href="{{ route('invoices.print', $inv->id) }}" target="_blank" class="btn btn-sm btn-primary me-1">
+                                                🖨️ طباعة
+                                            </a>
+                                            <form action="{{ route('invoices.destroy', $inv->id) }}" method="POST" class="d-inline-block" onsubmit="return confirm('هل أنت تأكد من إلغاء وحذف هذه الفاتورة؟ سيتم إرجاع الكميات للمخزون.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    إلغاء / حذف
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            @else
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">لا توجد فواتير حديثة حتى الآن.</td>
+                                </tr>
+                            @endif
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
             </div>
         </div>
     </div>
@@ -175,6 +284,14 @@
                         <label class="form-label">رقم الهاتف</label>
                         <input type="text" id="new-customer-phone" class="form-control">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">العنوان</label>
+                        <input type="text" id="new-customer-address" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الحد الائتماني (الحد الأقصى للدين)</label>
+                        <input type="number" step="0.01" id="new-customer-credit-limit" class="form-control" value="0">
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -187,18 +304,16 @@
 
 <script>
 let cart = [];
-let currentPriceType = 'retail'; // retail OR wholesale
+let currentPriceType = 'retail';
 
 function changePriceType(type) {
     currentPriceType = type;
     
-    // تحديث أسعار المعروضة في بطاقات المنتجات
     document.querySelectorAll('.price-display').forEach(el => {
         let price = type === 'wholesale' ? el.getAttribute('data-wholesale') : el.getAttribute('data-retail');
         el.innerText = parseFloat(price).toFixed(2) + ' د.ل';
     });
 
-    // تحديث أسعار المنتجات في السلة
     cart.forEach(item => {
         item.price = type === 'wholesale' ? item.wholesalePrice : item.retailPrice;
     });
@@ -208,7 +323,13 @@ function changePriceType(type) {
 
 function addToCart(id, name, retailPrice, wholesalePrice, stock) {
     if (stock <= 0) {
-        alert('المنتج غير متوفر بالمخزون!');
+        Swal.fire({
+            icon: 'warning',
+            title: 'تنبيه مخزون',
+            text: 'المنتج غير متوفر بالمخزون!',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
         return;
     }
 
@@ -217,7 +338,13 @@ function addToCart(id, name, retailPrice, wholesalePrice, stock) {
 
     if (existingItem) {
         if (existingItem.quantity + 1 > stock) {
-            alert('الكمية المطلوبة تتجاوز المتاح بالمخزون!');
+            Swal.fire({
+                icon: 'warning',
+                title: 'تجاوز الكمية',
+                text: 'الكمية المطلوبة تتجاوز المتاح بالمخزون!',
+                confirmButtonText: 'حسناً',
+                confirmButtonColor: '#d63939'
+            });
             return;
         }
         existingItem.quantity++;
@@ -271,9 +398,11 @@ function updateCartUI() {
 
     document.getElementById('grand-total').innerText = grandTotal.toFixed(2) + ' د.ل';
     
-    // ضبط التلقائي للمبلغ المدفوع حسب طريقة الدفع
+    // ضبط المبلغ المدفوع بناءً على طريقة الدفع
     let paymentMethod = document.getElementById('payment-method').value;
-    if (paymentMethod !== 'credit') {
+    if (paymentMethod === 'credit') {
+        document.getElementById('paid-amount').value = '0';
+    } else {
         document.getElementById('paid-amount').value = grandTotal.toFixed(2);
     }
     
@@ -295,7 +424,13 @@ function updateQty(index, change) {
     if (newQty <= 0) {
         cart.splice(index, 1);
     } else if (newQty > item.maxStock) {
-        alert('تجاوزت الكمية المتوفرة بالمخزون!');
+        Swal.fire({
+            icon: 'warning',
+            title: 'تجاوز الكمية',
+            text: 'تجاوزت الكمية المتوفرة بالمخزون!',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
     } else {
         item.quantity = newQty;
     }
@@ -328,16 +463,28 @@ function calculateChange() {
 function onPaymentMethodChange() {
     let method = document.getElementById('payment-method').value;
     let customerSelect = document.getElementById('customer-id');
+    let grandTotal = parseFloat(document.getElementById('grand-total').innerText) || 0;
 
     if (method === 'credit') {
         document.getElementById('invoice-type-badge').innerText = 'آجل';
         document.getElementById('invoice-type-badge').className = 'badge bg-warning text-dark fw-bold';
+        
+        // تصفير المبلغ المدفوع تلقائياً عند الدفع بالآجل
+        document.getElementById('paid-amount').value = '0';
+
         if (!customerSelect.value) {
-            alert('تنبيه: يجب اختيار زبون مسجل لإتمام عملية البيع بالأجل!');
+            Swal.fire({
+                icon: 'info',
+                title: 'تحديد الزبون',
+                text: 'تنبيه: يجب اختيار زبون مسجل لإتمام عملية البيع بالأجل!',
+                confirmButtonText: 'حسناً',
+                confirmButtonColor: '#206bc4'
+            });
         }
     } else {
         document.getElementById('invoice-type-badge').innerText = 'نقدي';
         document.getElementById('invoice-type-badge').className = 'badge bg-white text-primary fw-bold';
+        document.getElementById('paid-amount').value = grandTotal.toFixed(2);
     }
     calculateChange();
 }
@@ -375,9 +522,17 @@ document.getElementById('search-input').addEventListener('input', function (e) {
 function saveQuickCustomer() {
     let name = document.getElementById('new-customer-name').value;
     let phone = document.getElementById('new-customer-phone').value;
+    let address = document.getElementById('new-customer-address').value;
+    let creditLimit = document.getElementById('new-customer-credit-limit').value || 0;
 
     if (!name) {
-        alert('يرجى إدخال اسم الزبون');
+        Swal.fire({
+            icon: 'warning',
+            title: 'حقل مطلوب',
+            text: 'يرجى إدخال اسم الزبون',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
         return;
     }
 
@@ -385,37 +540,85 @@ function saveQuickCustomer() {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "X-CSRF-TOKEN": "{{ csrf_token() }}"
         },
-        body: JSON.stringify({ name: name, phone: phone })
+        body: JSON.stringify({ 
+            name: name, 
+            phone: phone,
+            address: address,
+            credit_limit: creditLimit
+        })
     })
-    .then(res => res.json())
+    .then(async res => {
+        const data = await res.json();
+        if (!res.ok) {
+            if (data.errors) {
+                let errorMessages = Object.values(data.errors).flat().join("\n");
+                throw new Error(errorMessages);
+            }
+            throw new Error(data.message || 'حدث خطأ في السيرفر');
+        }
+        return data;
+    })
     .then(data => {
-        if (data.success) {
+        if (data.success || data.customer) {
+            let customer = data.customer;
             let select = document.getElementById('customer-id');
             let option = document.createElement('option');
-            option.value = data.customer.id;
-            option.text = data.customer.name + (data.customer.phone ? ' (' + data.customer.phone + ')' : '');
-            option.setAttribute('data-balance', '0');
+            option.value = customer.id;
+            option.text = customer.name + (customer.phone ? ' (' + customer.phone + ')' : '');
+            option.setAttribute('data-balance', customer.balance || '0');
             option.selected = true;
             select.appendChild(option);
             
-            // اغلاق الـ Modal
+            document.getElementById('quick-customer-form').reset();
+
             var modalEl = document.getElementById('modal-add-customer');
             var modal = bootstrap.Modal.getInstance(modalEl);
-            modal.hide();
+            if (modal) {
+                modal.hide();
+            }
 
-            onCustomerChange();
+            if (typeof onCustomerChange === 'function') {
+                onCustomerChange();
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'تم الإضافة',
+                text: 'تم إضافة الزبون واختياره بنجاح.',
+                timer: 1500,
+                showConfirmButton: false
+            });
         } else {
-            alert(data.message || 'خطأ أثناء إضافة الزبون');
+            Swal.fire({
+                icon: 'error',
+                title: 'خطأ',
+                text: data.message || 'خطأ أثناء إضافة الزبون',
+                confirmButtonText: 'حسناً'
+            });
         }
     })
-    .catch(err => alert('حدث خطأ أثناء التواصل مع السيرفر'));
+    .catch(err => {
+        Swal.fire({
+            icon: 'error',
+            title: 'خطأ',
+            text: err.message || 'حدث خطأ أثناء التواصل مع السيرفر',
+            confirmButtonText: 'حسناً'
+        });
+    });
 }
 
 function processCheckout() {
     if (cart.length === 0) {
-        alert('السلة فارغة!');
+        Swal.fire({
+            icon: 'warning',
+            title: 'السلة فارغة',
+            text: 'يرجى إضافة منتجات إلى السلة أولاً!',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
         return;
     }
 
@@ -424,7 +627,13 @@ function processCheckout() {
     let paidAmount = parseFloat(document.getElementById('paid-amount').value) || 0;
 
     if (paymentMethod === 'credit' && !customerId) {
-        alert('لا يمكن إتمام البيع بالأجل لزبون عام! يرجى تحديد أو إضافة زبون أولاً.');
+        Swal.fire({
+            icon: 'warning',
+            title: 'زبون غير محدد',
+            text: 'لا يمكن إتمام البيع بالأجل لزبون عام! يرجى تحديد أو إضافة زبون أولاً.',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
         return;
     }
 
@@ -445,14 +654,99 @@ function processCheckout() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            alert('تم إنشاء الفاتورة بنجاح: ' + data.invoice_number);
-            cart = [];
-            location.reload();
+            Swal.fire({
+                icon: 'success',
+                title: 'تم حفظ الفاتورة بنجاح!',
+                text: 'رقم الفاتورة: ' + data.invoice_number,
+                showCancelButton: true,
+                confirmButtonText: 'طباعة الفاتورة',
+                cancelButtonText: 'فاتورة جديدة',
+                confirmButtonColor: '#206bc4',
+                cancelButtonColor: '#6c757d'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.open('/invoices/' + data.invoice_id + '/print', '_blank');
+                }
+                cart = [];
+                location.reload();
+            });
         } else {
-            alert(data.message || 'حدث خطأ أثناء إتمام العملية.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'تعذر إتمام العملية',
+                text: data.message,
+                confirmButtonText: 'حسناً، فهمت',
+                confirmButtonColor: '#d63939',
+                customClass: {
+                    popup: 'rounded-3 shadow-lg'
+                }
+            });
         }
     })
-    .catch(err => alert('حدث خطأ في الاتصال بالخادم.'));
+    .catch(err => {
+        Swal.fire({
+            icon: 'error',
+            title: 'خطأ في الاتصال',
+            text: 'حدث خطأ في الاتصال بالخادم، يرجى المحاولة لاحقاً.',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#d63939'
+        });
+    });
 }
+
+// تفعيل اختصارات لوحة المفاتيح للشاشة
+document.addEventListener('keydown', function(e) {
+    // F2: التركيز على مربع البحث
+    if (e.key === 'F2') {
+        e.preventDefault();
+        document.getElementById('search-input').focus();
+        document.getElementById('search-input').select();
+    }
+    
+    // F4: التبديل بين الدفع النقدي والآجل
+    if (e.key === 'F4') {
+        e.preventDefault();
+        let methodSelect = document.getElementById('payment-method');
+        methodSelect.value = (methodSelect.value === 'cash') ? 'credit' : 'cash';
+        onPaymentMethodChange();
+    }
+
+    // F5: فتح قائمة الفواتير السابقة للطباعة
+    if (e.key === 'F5') {
+        e.preventDefault();
+        var modalRecent = new bootstrap.Modal(document.getElementById('modal-recent-invoices'));
+        modalRecent.show();
+    }
+
+    // F8: إنهاء الفاتورة والطباعة
+    if (e.key === 'F8') {
+        e.preventDefault();
+        processCheckout();
+    }
+
+    // F9: تفريغ السلة (فاتورة جديدة)
+// F9: تفريغ السلة (فاتورة جديدة) بنوافذ SweetAlert2 الاحترافية
+if (e.key === 'F9') {
+    e.preventDefault();
+    if (cart.length === 0) return; // إذا كانت السلة فارغة لا داعي للتنبيه
+
+    Swal.fire({
+        title: 'تأكيد إلغاء الفاتورة',
+        text: 'هل تريد إلغاء الفاتورة الحالية وتفريغ السلة؟',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d63939',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'نعم، تفريغ السلة',
+        cancelButtonText: 'إلغاء'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            cart = [];
+            updateCartUI();
+        }
+    });
+}
+});
+
 </script>
 @endsection

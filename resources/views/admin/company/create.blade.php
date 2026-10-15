@@ -97,7 +97,13 @@
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
-
+<div class="mb-3">
+    <label class="form-check form-switch">
+        <input type="checkbox" name="enable_shifts" value="1" class="form-check-input" {{ old('enable_shifts', $company->enable_shifts ?? false) ? 'checked' : '' }}>
+        <span class="form-check-label fw-bold">تفعيل نظام الورديات (Cashier Shifts)</span>
+    </label>
+    <small class="text-muted">عند التفعيل، سيُطالب الكاشير بفتح وردية وإدخال رصيد البداية قبل بدء المبيعات.</small>
+</div>
                     <!-- شعار الشركة (Logo) -->
                     <div class="col-md-12">
                         <label for="logo" class="form-label">شعار الشركة (Logo)</label>

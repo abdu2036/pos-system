@@ -15,6 +15,21 @@
         </div>
     </div>
 
+    {{-- تنبيهات النجاح والخطأ --}}
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
     {{-- بطاقة بيانات المورد الأساسية --}}
     <div class="card mb-3">
         <div class="card-header">
@@ -92,7 +107,6 @@
                         <tr>
                             <td colspan="7" class="text-center py-4">لا توجد فواتير شراء مسجلة لهذا المورد.</td>
                         </tr>
-                    
                     @endforelse
                 </tbody>
             </table>
@@ -142,10 +156,22 @@
                             <td class="fw-bold text-success">{{ number_format($transaction->amount ?? 0, 2) }} د.ل</td>
                             <td>{{ $transaction->notes ?? '-' }}</td>
                             <td>
-                                {{-- زر طباعة الواصل المالي للمورد --}}
-                                <a href="{{ route('supplier_payments.print', $transaction->id) }}" target="_blank" class="btn btn-sm btn-outline-success">
-                                    طباعة الواصل
-                                </a>
+                                <div class="btn-list flex-nowrap">
+                                    {{-- زر طباعة الواصل المالي للمورد --}}
+                                    @can('print supplier receipt')
+                                    <a href="{{ route('supplier_payments.print', $transaction->id) }}" target="_blank" class="btn btn-sm btn-outline-success">
+                                        طباعة الواصل
+                                    </a>
+                                    @endcan
+                                    {{-- زر حذف الواصل في حالة الخطأ --}}
+                                    <form action="{{ route('suppliers.transactions.destroy', $transaction->id) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا الواصل؟ سيتم تعديل رصيد المورد تلقائياً.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            حذف
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     @empty

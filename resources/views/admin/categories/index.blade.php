@@ -34,14 +34,21 @@
                         <td>{{ $loop->iteration }}</td>
                         <td class="fw-bold">{{ $category->name }}</td>
                         <td class="text-muted">{{ $category->description ?? '-' }}</td>
-                        <td><span class="badge bg-blue">{{ $category->products_count }} منتج</span></td>
-                        <td>
-                            <form action="{{ route('categories.destroy', $category) }}" method="POST" onsubmit="return confirm('هل أنت تأكد؟')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="btn btn-danger btn-sm">حذف</button>
-                            </form>
-                        </td>
+                        <td><span class="badge bg-primary text-white">{{ $category->products_count }} منتج</span></td>
+<td>
+    <div class="d-flex gap-1">
+        <!-- زر الانتقال لصفحة التعديل -->
+        <a href="{{ route('categories.edit', $category->id) }}" class="btn btn-warning btn-sm">
+            تعديل
+        </a>
+
+        <form action="{{ route('categories.destroy', $category) }}" method="POST" onsubmit="return confirm('هل أنت تأكد من الحذف؟')">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="btn btn-danger btn-sm">حذف</button>
+        </form>
+    </div>
+</td>
                     </tr>
                 @empty
                     <tr>

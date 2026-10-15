@@ -70,7 +70,13 @@
                             <input type="text" name="currency" class="form-control" value="{{ old('currency', $company->currency ?? 'د.ل') }}" required>
                         </div>
                     </div>
-
+<div class="mb-3">
+    <label class="form-check form-switch">
+        <input type="checkbox" name="enable_shifts" value="1" class="form-check-input" {{ old('enable_shifts', $company->enable_shifts ?? false) ? 'checked' : '' }}>
+        <span class="form-check-label fw-bold">تفعيل نظام الورديات (Cashier Shifts)</span>
+    </label>
+    <small class="text-muted">عند التفعيل، سيُطالب الكاشير بفتح وردية وإدخال رصيد البداية قبل بدء المبيعات.</small>
+</div>
                     <div class="col-md-12">
                         <div class="mb-3">
                             <label class="form-label">الشعار (Logo)</label>

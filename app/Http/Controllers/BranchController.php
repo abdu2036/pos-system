@@ -5,9 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use App\Models\CompanySetting;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class BranchController extends Controller
+class BranchController extends Controller implements HasMiddleware
 {
+        public static function middleware(): array
+    {
+        return [
+            new Middleware('permission:manage branches', only: ['index']),
+            new Middleware('permission:create branches', only: ['create', 'store']),
+            new Middleware('permission:view branches', only: ['show']),
+            new Middleware('permission:edit branches', only: ['edit', 'update']),
+            new Middleware('permission:delete branches', only: ['destroy']),
+        ];
+    }
+
     // عرض قائمة الفروع
     public function index()
     {

@@ -7,32 +7,109 @@ use App\Models\Supplier;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Branch;
+use App\Models\Treasury;
+use App\Models\TreasuryTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class PurchaseInvoiceController extends Controller
+
+class PurchaseInvoiceController extends Controller implements HasMiddleware
 {
-    public function index()
+        public static function middleware(): array
     {
-        $invoices = PurchaseInvoice::with('supplier')->latest()->paginate(10);
-        return view('admin.purchase_invoices.index', compact('invoices'));
+        return [
+            new Middleware('permission:manage purchase invoices', only: ['index']),
+            new Middleware('permission:create purchase invoices', only: ['create', 'store']),
+            new Middleware('permission:edit purchase invoices', only: ['edit', 'update']),
+            new Middleware('permission:delete purchase invoices', only: ['destroy']),
+             new Middleware('permission:print purchase invoices', only: ['print']),
+              new Middleware('permission:print supplier receipt', only: ['printSupplierReceipt']),
+              new Middleware('permission:settle purchase invoices', only: ['settle']),
+        ];
+    }
+public function index(Request $request)
+{
+    $search = $request->input('search');
+    $startDate = $request->input('start_date');
+    $endDate = $request->input('end_date');
+
+    $query = PurchaseInvoice::with('supplier')
+        ->when($search, function ($query, $search) {
+            return $query->where('invoice_number', 'like', "%{$search}%")
+                         ->orWhereHas('supplier', function ($q) use ($search) {
+                             $q->where('name', 'like', "%{$search}%");
+                         });
+        })
+        ->when($startDate, function ($query, $startDate) {
+            return $query->whereDate('created_at', '>=', $startDate);
+        })
+        ->when($endDate, function ($query, $endDate) {
+            return $query->whereDate('created_at', '<=', $endDate);
+        });
+
+    // حساب الإجماليات والكروت بناءً على نتائج البحث والفلترة الزمنية
+    $statsQuery = clone $query;
+    $totalInvoices = $statsQuery->count();
+    $totalAmount = $statsQuery->sum('total_amount');
+    $totalPaid = $statsQuery->sum('paid_amount');
+    
+    // ربط إجمالي المتبقي (الديون) ليطابق أرصدة الموردين الحالية تماماً
+    $totalRemaining = Supplier::sum('balance');
+
+    // فحص إذا كان المطلوب طباعة التقرير (مع الحفاظ على الفلترة)
+    if ($request->has('print')) {
+        $invoices = $query->latest()->get();
+        $company = \App\Models\CompanySetting::first();
+        
+        // جلب بيانات الفرع للتقرير المطبوع
+        $branch = \App\Models\Branch::first(); 
+
+        return view('admin.purchase_invoices.print_report', compact(
+            'invoices', 
+            'totalInvoices', 
+            'totalAmount', 
+            'totalPaid', 
+            'totalRemaining', 
+            'company', 
+            'branch', 
+            'startDate', 
+            'endDate'
+        ));
     }
 
+    $invoices = $query->latest()->paginate(10)->withQueryString();
+
+    return view('admin.purchase_invoices.index', compact(
+        'invoices', 
+        'search', 
+        'startDate',
+        'endDate',
+        'totalInvoices', 
+        'totalAmount', 
+        'totalPaid', 
+        'totalRemaining'
+    ));
+}
     public function create()
     {
         $suppliers = Supplier::all();
         $products = Product::all();
         $categories = Category::all();
-        
+        $treasuries = Treasury::where('is_active', true)->get();
 
-        return view('admin.purchase_invoices.create', compact('suppliers', 'products', 'categories'));
+        return view('admin.purchase_invoices.create', compact('suppliers', 'products', 'categories', 'treasuries'));
     }
 
-    public function store(Request $request)
+public function store(Request $request)
     {
         $request->validate([
             'supplier_id'            => 'required|exists:suppliers,id',
             'payment_method'         => 'required|string',
+            'paid_amount'            => 'nullable|numeric|min:0',
+            'treasury_id'            => 'nullable|exists:treasuries,id',
             'items'                  => 'required|array|min:1',
             'items.*.product_id'     => 'required|exists:products,id',
             'items.*.quantity'       => 'required|numeric|min:1',
@@ -48,10 +125,20 @@ class PurchaseInvoiceController extends Controller
                 $totalAmount += $item['quantity'] * $item['purchase_price'];
             }
 
-            $paidAmount = in_array($request->payment_method, ['cash', 'نقداً']) ? $totalAmount : 0;
+            $paidAmount = in_array($request->payment_method, ['cash', 'نقداً']) && !$request->filled('paid_amount') 
+                ? $totalAmount 
+                : ($request->paid_amount ?? 0);
+
+            $remainingAmount = $totalAmount - $paidAmount;
+
+            // توليد رقم الفاتورة بالسنة والتسلسل التلقائي
+            $year = date('Y');
+            $latest = PurchaseInvoice::where('invoice_number', 'like', "PUR-{$year}-%")->latest('id')->first();
+            $nextNumber = $latest ? intval(substr($latest->invoice_number, -4)) + 1 : 1;
+            $invoiceNumber = 'PUR-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             $invoice = PurchaseInvoice::create([
-                'invoice_number' => 'PUR-' . strtoupper(substr(uniqid(), -8)),
+                'invoice_number' => $invoiceNumber,
                 'supplier_id'    => $request->supplier_id,
                 'total_amount'   => $totalAmount,
                 'paid_amount'    => $paidAmount,
@@ -102,16 +189,47 @@ class PurchaseInvoiceController extends Controller
                 }
             }
 
-            if (!in_array($request->payment_method, ['cash', 'نقداً'])) {
+            // 1. إذا كان هناك مبلغ متبقي (آجل)، يُضاف إلى رصيد المورد
+            if ($remainingAmount > 0) {
                 $supplier = Supplier::find($request->supplier_id);
                 if ($supplier) {
-                    $supplier->increment('balance', $totalAmount);
+                    $supplier->increment('balance', $remainingAmount);
+                }
+            }
+
+            // 2. إذا تم دفع مبلغ، يُخصم من الخزينة أو البنك ويسجل كحركة سحب
+            if ($paidAmount > 0) {
+                $treasuryId = $request->treasury_id;
+                if (!$treasuryId) {
+                    if (in_array($request->payment_method, ['card', 'transfer'])) {
+                        $targetTreasury = Treasury::where('type', 'bank')->first() ?? Treasury::first();
+                    } else {
+                        $targetTreasury = Treasury::where('type', 'cash')->first() ?? Treasury::first();
+                    }
+                    $treasuryId = $targetTreasury ? $targetTreasury->id : null;
+                }
+
+                if ($treasuryId) {
+                    $treasury = Treasury::findOrFail($treasuryId);
+
+                    TreasuryTransaction::create([
+                        'treasury_id' => $treasury->id,
+                        'type'        => 'withdrawal',
+                        'amount'      => $paidAmount,
+                        'source_type' => 'purchase',
+                        'source_id'   => $invoice->id,
+                        'user_id'     => Auth::id(),
+                        'notes'       => 'سداد فاتورة شراء رقم: ' . $invoice->invoice_number,
+                    ]);
+
+                    $treasury->current_balance -= $paidAmount;
+                    $treasury->save();
                 }
             }
         });
 
         return redirect()->route('purchase_invoices.index')
-            ->with('success', 'تم حفظ فاتورة الشراء وتحديث الأسعار والمخزون بنجاح.');
+            ->with('success', 'تم حفظ فاتورة الشراء وتحديث الأسعار والمخزون والخزينة بنجاح.');
     }
 
 public function storeQuickProduct(Request $request)
@@ -209,7 +327,6 @@ public function storeQuickProduct(Request $request)
         }
 
         // تحديد المبلغ المدفوع الصحيح:
-        // إذا كان الدفع نقداً يكون المدفوع مساوياً للإجمالي، وإذا كان آجل يُحفظ المبلغ المدفوع القديم للفاتورة (عادة 0)
         $paidAmount = in_array($request->payment_method, ['cash', 'نقداً']) 
             ? $totalAmount 
             : ($request->filled('paid_amount') ? $request->paid_amount : $invoice->paid_amount);
@@ -255,11 +372,13 @@ public function storeQuickProduct(Request $request)
     return redirect()->route('purchase_invoices.index')->with('success', 'تم تعديل الفاتورة بنجاح.');
 }
 
-    public function settle(Request $request, $id)
+//
+    public function settle(Request $request, $id) // دالة لتسوية حساب الفاتورة
     {
         $request->validate([
             'amount'         => 'required|numeric|min:0.01',
             'payment_method' => 'nullable|string',
+            'treasury_id'    => 'nullable|exists:treasuries,id',
         ]);
 
         $invoice = PurchaseInvoice::findOrFail($id);
@@ -286,21 +405,90 @@ public function storeQuickProduct(Request $request)
                     'notes'          => 'تسوية فاتورة شراء رقم: ' . ($invoice->invoice_number ?? $invoice->id),
                 ]);
             }
+
+            // الخصم من الخزينة أو البنك عند التسوية
+            $treasuryId = $request->treasury_id;
+            if (!$treasuryId) {
+                if (in_array($request->payment_method, ['card', 'transfer'])) {
+                    $targetTreasury = Treasury::where('type', 'bank')->first() ?? Treasury::first();
+                } else {
+                    $targetTreasury = Treasury::where('type', 'cash')->first() ?? Treasury::first();
+                }
+                $treasuryId = $targetTreasury ? $targetTreasury->id : null;
+            }
+
+            if ($treasuryId) {
+                $treasury = Treasury::findOrFail($treasuryId);
+
+                TreasuryTransaction::create([
+                    'treasury_id' => $treasury->id,
+                    'type'        => 'withdrawal',
+                    'amount'      => $amountPaid,
+                    'source_type' => 'purchase_settlement',
+                    'source_id'   => $invoice->id,
+                    'user_id'     => Auth::id(),
+                    'notes'       => 'تسوية وسداد فاتورة شراء رقم: ' . $invoice->invoice_number,
+                ]);
+
+                $treasury->current_balance -= $amountPaid;
+                $treasury->save();
+            }
         });
 
-        return redirect()->back()->with('success', 'تم تسوية حساب الفاتورة بنجاح.');
+        return redirect()->back()->with('success', 'تم تسوية حساب الفاتورة وتحديث الخزينة بنجاح.');
     }
 
     public function destroy($id)
     {
-        $invoice = PurchaseInvoice::findOrFail($id);
+        $invoice = PurchaseInvoice::with('items')->findOrFail($id);
         
         DB::transaction(function () use ($invoice) {
+            // 1. عكس رصيد المورد إذا كان هناك مبلغ آجل
+            $remainingAmount = $invoice->total_amount - $invoice->paid_amount;
+            if ($remainingAmount > 0 && $invoice->supplier_id) {
+                $supplier = Supplier::find($invoice->supplier_id);
+                if ($supplier) {
+                    $supplier->decrement('balance', $remainingAmount);
+                }
+            }
+
+            // 2. عكس الحركة المالية من الخزينة واسترجاع المبلغ المدفوع إن وجد
+            $transaction = TreasuryTransaction::where('source_type', 'purchase')
+                ->where('source_id', $invoice->id)
+                ->first();
+
+            if ($transaction) {
+                $treasury = Treasury::find($transaction->treasury_id);
+                if ($treasury) {
+                    $treasury->current_balance += $transaction->amount;
+                    $treasury->save();
+                }
+                $transaction->delete();
+            }
+
+            // 3. خصم الكميات المضافة من المخزون
+            $mainBranch = Branch::first();
+            if ($mainBranch) {
+                foreach ($invoice->items as $item) {
+                    $product = Product::with('branches')->find($item->product_id);
+                    if ($product) {
+                        $product->decrement('quantity', $item->quantity);
+
+                        $branchProduct = $product->branches->where('id', $mainBranch->id)->first();
+                        if ($branchProduct) {
+                            $product->branches()->updateExistingPivot($mainBranch->id, [
+                                'quantity' => max(0, $branchProduct->pivot->quantity - $item->quantity)
+                            ]);
+                        }
+                    }
+                }
+            }
+
             $invoice->items()->delete();
             $invoice->delete();
         });
 
-        return redirect()->route('purchase_invoices.index')->with('success', 'تم حذف الفاتورة بنجاح.');
+        return redirect()->route('purchase_invoices.index')->with('success', 'تم حذف الفاتورة وعكس تأثيرها على المخزون والموردين والخزينة بنجاح.');
     }
 
     public function print(PurchaseInvoice $purchaseInvoice)

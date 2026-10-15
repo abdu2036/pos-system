@@ -12,7 +12,11 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\PurchaseInvoiceController; 
-
+use App\Http\Controllers\FinancialReportController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\TreasuryController;
+use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\RoleController;
 // الصفحة الرئيسية: إعادة التوجيه التلقائي إلى لوحة التحكم
 Route::get('/', function () {
     return redirect()->route('dashboard');
@@ -45,16 +49,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
 Route::middleware(['auth'])->group(function () {
+    Route::get('/products/print-inventory', [ProductController::class, 'printInventory'])->name('products.print-inventory');
     // مسارات التصنيفات والمنتجات
     Route::resource('categories', CategoryController::class);
     Route::resource('products', ProductController::class);
+
 });
 
+Route::middleware(['auth', 'active.shift'])->group(function () {
+    //pos system 
+    Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
+    
 
-Route::middleware(['auth'])->group(function () {
-//pos system 
-Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
 Route::post('/pos/checkout', [PosController::class, 'store'])->name('pos.store');
+    // أي مسارات أخرى خاصة بنقطة البيع مثل إتمام الفاتورة
 });
 
 
@@ -73,6 +81,7 @@ Route::post('suppliers/{supplier}/pay', [SupplierController::class, 'addPayment'
 Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->name('suppliers.show');
 Route::get('/suppliers/payments/{payment}/print', [PurchaseInvoiceController::class, 'printSupplierReceipt'])
     ->name('supplier_payments.print');
+Route::delete('/suppliers/transactions/{id}', [SupplierController::class, 'destroyTransaction'])->name('suppliers.transactions.destroy');
 
 });
 
@@ -111,7 +120,45 @@ Route::get('/customers/receipt/{id}/print', [CustomerController::class, 'printRe
 
 
 
-Route::delete('/customers/transactions/{id}', [CustomerController::class, 'destroyTransaction'])->name('customers.transactions.destroy');
+
+//التقريرات المالية
+Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/financial-reports', [FinancialReportController::class, 'index'])->name('reports.financial');
+});
+
+
+Route::middleware(['auth', ])->prefix('admin')->group(function () {
+    // إدارة المستخدمين
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
+
+    // إدارة الأدوار والصلاحيات
+    Route::resource('roles', RoleController::class);
+});
+
+// مسارات إدارة الخزائن والحسابات
+Route::middleware(['auth'])->prefix('admin')->group(function () {
+    // المسارات السابقة (المستخدمين، الأدوار)...
+        Route::get('treasuries/report', [TreasuryController::class, 'report'])->name('treasuries.report');
+
+    // إدارة الخزائن
+    Route::resource('treasuries', TreasuryController::class);
+});
+
+
+//الورديات
+Route::middleware(['auth'])->prefix('admin')->group(function () {
+    
+    Route::get('shifts/open', [ShiftController::class, 'create'])->name('shifts.create');
+    Route::post('shifts/open', [ShiftController::class, 'store'])->name('shifts.store');
+    Route::get('shifts/{id}/close', [ShiftController::class, 'closeForm'])->name('shifts.close.form');
+    Route::post('shifts/{id}/close', [ShiftController::class, 'close'])->name('shifts.close');
+
+        Route::resource('shifts', ShiftController::class);
+    
+});
 
 // مسارات المصادقة التابعة لحزمة Breeze (تسجيل الدخول، الخروج، إلخ) 
 require __DIR__.'/auth.php';

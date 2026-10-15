@@ -7,13 +7,44 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class CustomerController extends Controller
 {
-    public function index()
+   public function index(Request $request)
     {
-        $customers = Customer::latest()->get();
-        return view('admin.customers.index', compact('customers'));
+        $query = Customer::query();
+
+        // 1. البحث السريع باسم الزبون أو رقم الهاتف
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        // حساب الإجماليات والكروت بناءً على نتائج البحث
+        $statsQuery = clone $query;
+        $totalCustomers = $statsQuery->count();
+        $totalDebts = $statsQuery->sum('balance'); // إجمالي الديون الحالية
+        $totalCreditLimit = $statsQuery->sum('credit_limit'); // إجمالي الحد الائتماني
+
+        // جلب الزبائن مرتبة من الأحدث للأقدم مع التصفح (أو يمكنك استخدام get() إذا كنت لا تزال تفضلها)
+        $customers = $query->latest()->paginate(15)->withQueryString();
+
+        // فحص إذا كان المطلوب طباعة تقرير الزبائن والديون
+        if ($request->has('print')) {
+            $company = \App\Models\CompanySetting::first();
+            return view('admin.customers.print_report', compact('customers', 'totalCustomers', 'totalDebts', 'totalCreditLimit', 'company'));
+        }
+
+        return view('admin.customers.index', compact(
+            'customers', 
+            'totalCustomers', 
+            'totalDebts', 
+            'totalCreditLimit'
+        ));
     }
 
     public function store(Request $request)
@@ -55,11 +86,13 @@ class CustomerController extends Controller
     }
 
     // تسديد دفعة من الزبون مع حماية عدم تجاوز الدين القائم
-    public function addPayment(Request $request, Customer $customer)
+  // تسديد دفعة من الزبون مع ربطها بالخزينة وتحديث الرصيد
+    public function addPayment(Request $request, Customer $customer) 
     {
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_method' => 'required|string',
+            'treasury_id' => 'nullable|exists:treasuries,id', // اختيار الخزينة أو البنك إن وجد
             'notes' => 'nullable|string',
         ]);
 
@@ -74,19 +107,51 @@ class CustomerController extends Controller
         }
 
         DB::transaction(function () use ($customer, $request) {
-            // خصم المبلغ من رصيد دين الزبون
+            // 1. خصم المبلغ من رصيد دين الزبون
             $customer->decrement('balance', $request->amount);
 
-            // تسجيل حركة السداد
-            $customer->transactions()->create([
-                'type' => 'receipt',
+            // 2. تسجيل حركة السداد في معاملات الزبون
+            $transaction = $customer->transactions()->create([
+                'type' => 'payment',
                 'amount' => $request->amount,
                 'payment_method' => $request->payment_method,
                 'notes' => $request->notes ?? 'سداد دفعة من الحساب'
             ]);
+
+            // 3. التوجيه الذكي وتحديث الخزينة أو الحساب البنكي
+            $treasuryId = $request->treasury_id;
+            
+            if (!$treasuryId) {
+                // إذا كانت بطاقة أو تحويل، نختار حساب البنك تلقائياً، وإلا الخزينة النقدية
+                if (in_array($request->payment_method, ['card', 'transfer'])) {
+                    $targetTreasury = \App\Models\Treasury::where('type', 'bank')->first() ?? \App\Models\Treasury::first();
+                } else {
+                    $targetTreasury = \App\Models\Treasury::where('type', 'cash')->first() ?? \App\Models\Treasury::first();
+                }
+                $treasuryId = $targetTreasury ? $targetTreasury->id : null;
+            }
+
+            if ($treasuryId) {
+                $treasury = \App\Models\Treasury::findOrFail($treasuryId);
+
+                // تسجيل الحركة المالية في جدول خزائن الحركات
+                \App\Models\TreasuryTransaction::create([
+                    'treasury_id' => $treasury->id,
+                    'type' => 'deposit', // إيداع نقدي/بنكي مقابل تحصيل دين من زبون
+                    'amount' => $request->amount,
+                    'source_type' => 'customer_payment',
+                    'source_id' => $customer->id,
+                    'user_id' => Auth::id(),
+                    'notes' => 'تحصيل دفعة دين من الزبون: ' . $customer->name,
+                ]);
+
+                // تحديث الرصيد الحالي للخزينة أو البنك فوراً
+                $treasury->current_balance += $request->amount;
+                $treasury->save();
+            }
         });
 
-        return redirect()->back()->with('success', 'تم تسجيل السداد وتحديث رصيد الزبون بنجاح.');
+        return redirect()->back()->with('success', 'تم تسجيل السداد وتحديث رصيد الزبون والخزينة بنجاح.');
     }
 
     // عرض كشف حساب الزبون

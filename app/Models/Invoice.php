@@ -13,6 +13,7 @@ class Invoice extends Model
         'invoice_number',
         'customer_id',
         'branch_id',
+        'shift_id',
         'total_amount',
         'paid_amount',
         'change_amount',
@@ -42,4 +43,13 @@ class Invoice extends Model
     {
         return $this->hasMany(InvoiceItem::class);
     }
+
+    /**
+     * علاقة الفاتورة بالوردية
+     */
+    public function shift()
+    {
+        return $this->belongsTo(Shift::class);  
+     }
+       
 }

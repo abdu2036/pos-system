@@ -5,13 +5,59 @@
     <div class="page-header d-print-none mb-3">
         <div class="row align-items-center">
             <div class="col">
-                <h2 class="page-title">إدارة الزبائن والديون</h2>
+                <h2 class="page-title fw-bold">إدارة الزبائن والديون</h2>
             </div>
-            <div class="col-auto ms-auto">
+            <div class="col-auto ms-auto d-flex gap-2">
+                <a href="{{ route('customers.index', array_merge(request()->all(), ['print' => 1])) }}" target="_blank" class="btn btn-outline-primary">
+                    🖨️ طباعة تقرير الزبائن
+                </a>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-add-customer">
                     + إضافة زبون جديد
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- كروت الإحصائيات العلوية -->
+    <div class="row row-cards mb-4">
+        <div class="col-sm-6 col-lg-4">
+            <div class="card card-sm border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي عدد الزبائن</div>
+                    <div class="fw-bold fs-2 text-dark">{{ number_format($totalCustomers ?? 0) }} <small class="fs-6">زبون</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-4">
+            <div class="card card-sm border-0 shadow-sm border-start border-danger border-3">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي الديون الحالية (المستحقة)</div>
+                    <div class="fw-bold fs-2 text-danger">{{ number_format($totalDebts ?? 0, 2) }} <small class="fs-6">د.ل</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-4">
+            <div class="card card-sm border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي الحد الائتماني الممنوح</div>
+                    <div class="fw-bold fs-2 text-primary">{{ number_format($totalCreditLimit ?? 0, 2) }} <small class="fs-6">د.ل</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- شريط البحث والفلترة -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body bg-light">
+            <form action="{{ route('customers.index') }}" method="GET" class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <input type="text" name="search" value="{{ request('search') }}" class="form-control" placeholder="ابحث باسم الزبون أو رقم الهاتف...">
+                </div>
+                <div class="col-md-2 d-flex gap-1">
+                    <button type="submit" class="btn btn-primary w-100">بحث</button>
+                    <a href="{{ route('customers.index') }}" class="btn btn-outline-secondary">✖</a>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -30,7 +76,7 @@
         </div>
     @endif
 
-    <div class="card">
+    <div class="card border-0 shadow-sm">
         <div class="table-responsive">
             <table class="table table-vcenter card-table table-striped">
                 <thead>
@@ -43,7 +89,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($customers as $customer)
+                    @forelse($customers as $customer)
                     <tr>
                         <td class="fw-bold">{{ $customer->name }}</td>
                         <td>{{ $customer->phone ?? '-' }}</td>
@@ -59,7 +105,6 @@
                         <td>{{ number_format($customer->credit_limit, 2) }} د.ل</td>
                         <td>
                             <div class="btn-list flex-nowrap justify-content-center">
-                                <!-- إخفاء زر تسديد دفعة إذا كان الدين يساوي 0 أو أقل -->
                                 @if($customer->balance > 0)
                                     <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modal-pay-{{ $customer->id }}">
                                         تسديد دفعة
@@ -70,12 +115,10 @@
                                     كشف حساب
                                 </a>
 
-                                <!-- زر التعديل -->
                                 <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modal-edit-{{ $customer->id }}">
                                     تعديل
                                 </button>
 
-                                <!-- زر الحذف -->
                                 @if(method_exists($customer, 'hasFinancialRecords') && $customer->hasFinancialRecords())
                                     <button class="btn btn-sm btn-outline-danger" disabled title="لا يمكن حذف زبون عليه ديون أو يملك معاملات مالية">
                                         حذف
@@ -98,15 +141,14 @@
                     <div class="modal fade" id="modal-pay-{{ $customer->id }}" tabindex="-1">
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content">
-                                <form action="{{ route('customers.payments.store', $customer->id) }}" method="POST">
-                                    @csrf
+<form action="{{ route('customers.pay', $customer->id) }}" method="POST">                                    @csrf
                                     <div class="modal-header">
                                         <h5 class="modal-title">قبض دفعة من: {{ $customer->name }}</h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                     </div>
                                     <div class="modal-body">
                                         <div class="mb-3">
-                                            <label class="form-label required">المبلغ القابض (الدين المتبقي: {{ number_format($customer->balance, 2) }} د.ل)</label>
+                                            <label class="form-label required">المبلغ المقبوض (الدين المتبقي: {{ number_format($customer->balance, 2) }} د.ل)</label>
                                             <input type="number" step="0.01" max="{{ $customer->balance }}" name="amount" class="form-control" required>
                                         </div>
                                         <div class="mb-3">
@@ -167,10 +209,20 @@
                             </div>
                         </div>
                     </div>
-                    @endforeach
+                    @empty
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">لا توجد بيانات زبائن مطابقة.</td>
+                    </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
+        <!-- روابط التصفح -->
+        @if(method_exists($customers, 'links'))
+        <div class="card-footer d-flex align-items-center">
+            {!! $customers->links() !!}
+        </div>
+        @endif
     </div>
 </div>
 

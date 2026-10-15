@@ -6,13 +6,56 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Branch;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class ProductController extends Controller
+class ProductController extends Controller  implements HasMiddleware
 {
-    public function index()
+    public static function middleware(): array
     {
-        $products = Product::with(['category', 'branches'])->latest()->paginate(10);
-        return view('admin.products.index', compact('products'));
+        return [
+            new Middleware('permission:manage products', only: ['index']),
+            new Middleware('permission:create products', only: ['create', 'store']),
+            new Middleware('permission:edit products', only: ['edit', 'update']),
+            new Middleware('permission:delete products', only: ['destroy']),
+             new Middleware('permission:print products', only: ['printInventory']),
+            
+        ];
+    }
+
+ public function index()
+    {
+        $products = Product::with(['category', 'branches'])->get();
+
+        // الحسابات التجميعية للمخزون
+        $totalQuantity = 0;
+        $totalPurchaseCost = 0;
+        $totalRetailSales = 0;
+        $totalWholesaleSales = 0;
+
+        foreach ($products as $product) {
+            $qty = $product->branches->sum('pivot.quantity'); // مجموع الكمية المتوفرة في جميع الفروع
+            
+            $totalQuantity += $qty;
+            // استخدام cost_price بدلاً من purchase_price مطابقةً لجدول المنتجات لديك
+            $totalPurchaseCost += ($product->cost_price ?? 0) * $qty;
+            $totalRetailSales += ($product->selling_price ?? 0) * $qty;
+            $totalWholesaleSales += ($product->wholesale_price ?? $product->selling_price ?? 0) * $qty;
+        }
+
+        // حساب الأرباح المتوقعة
+        $expectedRetailProfit = $totalRetailSales - $totalPurchaseCost;
+        $expectedWholesaleProfit = $totalWholesaleSales - $totalPurchaseCost;
+
+        return view('admin.products.index', compact(
+            'products',
+            'totalQuantity',
+            'totalPurchaseCost',
+            'totalRetailSales',
+            'totalWholesaleSales',
+            'expectedRetailProfit',
+            'expectedWholesaleProfit'
+        ));
     }
 
     public function create()
@@ -99,4 +142,34 @@ class ProductController extends Controller
         $product->delete();
         return redirect()->route('products.index')->with('success', 'تم حذف المنتج بنجاح');
     }
+
+    // دالة لطباعة تقرير المخزون
+    public function printInventory()
+{
+    $products = Product::with(['category', 'branches'])->get();
+    $company = \App\Models\CompanySetting::first();
+
+    // حساب التجميعات لنهاية التقرير
+    $totalQuantity = 0;
+    $totalPurchaseCost = 0;
+    $totalRetailSales = 0;
+    $totalWholesaleSales = 0;
+
+    foreach ($products as $product) {
+        $qty = $product->branches->sum('pivot.quantity');
+        $totalQuantity += $qty;
+        $totalPurchaseCost += ($product->cost_price ?? 0) * $qty;
+        $totalRetailSales += ($product->selling_price ?? 0) * $qty;
+        $totalWholesaleSales += ($product->wholesale_price ?? $product->selling_price ?? 0) * $qty;
+    }
+
+    return view('admin.products.print_inventory', compact(
+        'products',
+        'company',
+        'totalQuantity',
+        'totalPurchaseCost',
+        'totalRetailSales',
+        'totalWholesaleSales'
+    ));
+}
 }

@@ -35,7 +35,16 @@
                                 @endif
                             </div>
                             <h3 class="m-0 font-weight-bold">{{ $company->name }}</h3>
-                            <span class="badge bg-green-lt mt-2">العملة: {{ $company->currency }}</span>
+                            <div class="mt-2 d-flex flex-column gap-1 align-items-center">
+                                <span class="badge bg-green-lt">العملة: {{ $company->currency }}</span>
+                                
+                                <!-- حالة نظام الورديات -->
+                                @if(isset($company->enable_shifts) && $company->enable_shifts)
+                                    <span class="badge bg-success text-white">نظام الورديات: مفعل</span>
+                                @else
+                                    <span class="badge bg-secondary text-white">نظام الورديات: معطل</span>
+                                @endif
+                            </div>
                         </div>
 
                         <div class="col-md-9">

@@ -5,9 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\CompanySetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class CompanySettingController extends Controller
+class CompanySettingController extends Controller implements HasMiddleware
 {
+    /**
+     * تحديد الصلاحيات والـ Middleware لكل دالة داخل الكنترول
+     */
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('permission:manage company', only: ['index']),
+            new Middleware('permission:create company', only: ['create', 'store']),
+            new Middleware('permission:view company', only: ['show']),
+            new Middleware('permission:edit company', only: ['edit', 'update']),
+            new Middleware('permission:delete company', only: ['destroy']),
+        ];
+    }
+
     // عرض تفاصيل الشركة
     public function index()
     {
@@ -16,20 +32,19 @@ class CompanySettingController extends Controller
     }
 
     // صفحة إنشاء بيانات الشركة لأول مرة
- public function create()
-{
-    $company = CompanySetting::first();
-    if ($company) {
-        return redirect()->route('company-settings.edit');
-    }
+    public function create()
+    {
+        $company = CompanySetting::first();
+        if ($company) {
+            return redirect()->route('company-settings.edit');
+        }
 
-    // التأكد من وجود الواجهة
-    if (!view()->exists('admin.company.create')) {
-        return "الملف resources/views/admin/company/create.blade.php غير موجود!";
-    }
+        if (!view()->exists('admin.company.create')) {
+            return "الملف resources/views/admin/company/create.blade.php غير موجود!";
+        }
 
-    return view('admin.company.create');
-}
+        return view('admin.company.create');
+    }
 
     // حفظ البيانات الجديدة لأول مرة
     public function store(Request $request)
@@ -49,9 +64,12 @@ class CompanySettingController extends Controller
             'trade_license'  => 'nullable|string|max:100',
             'tax_number'     => 'nullable|string|max:100',
             'invoice_footer' => 'nullable|string',
+            'enable_shifts'  => 'nullable|boolean',
         ]);
 
         $data = $request->except('logo');
+        // معالجة خانة الاختيار للورديات (إذا لم تُحدد تُرسل كـ false)
+        $data['enable_shifts'] = $request->has('enable_shifts');
 
         if ($request->hasFile('logo')) {
             $data['logo'] = $request->file('logo')->store('company', 'public');
@@ -65,7 +83,6 @@ class CompanySettingController extends Controller
     // صفحة تعديل بيانات الشركة
     public function edit()
     {
-        // استخدام firstOrCreate لتجنب التحويل الدائري ولضمان الحصول على كائن دائماً
         $company = CompanySetting::first();
 
         if (!$company) {
@@ -89,16 +106,18 @@ class CompanySettingController extends Controller
             'trade_license'  => 'nullable|string|max:100',
             'tax_number'     => 'nullable|string|max:100',
             'invoice_footer' => 'nullable|string',
+            'enable_shifts'  => 'nullable|boolean',
         ]);
 
         $company = CompanySetting::first();
 
-        // في حال عدم وجود سجل سابق، يتم إنشاؤه فوراً مع التحديث
         if (!$company) {
             $company = new CompanySetting();
         }
 
         $data = $request->except('logo');
+        // معالجة خانة الاختيار للورديات (تحديث القيمة بناءً على وجودها في الطلب)
+        $data['enable_shifts'] = $request->has('enable_shifts');
 
         if ($request->hasFile('logo')) {
             if ($company->logo && Storage::disk('public')->exists($company->logo)) {

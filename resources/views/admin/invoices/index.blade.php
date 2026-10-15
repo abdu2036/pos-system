@@ -2,17 +2,101 @@
 
 @section('content')
 <div class="container-xl">
-    <div class="page-header d-print-none mb-3">
-        <div class="row align-items-center">
-            <div class="col">
-                <h2 class="page-title">سجل الفواتير والمبيعات</h2>
+    <!-- عنوان الصفحة وزر الطباعة والإضافة -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="page-title fw-bold">سجل الفواتير والمبيعات</h2>
+        <div>
+            <a href="{{ route('invoices.index', array_merge(request()->all(), ['print' => 1])) }}" target="_blank" class="btn btn-outline-primary me-2">
+                🖨️ طباعة تقرير المبيعات
+            </a>
+            <a href="{{ route('pos.index') }}" class="btn btn-primary">
+                + نقطة البيع (POS)
+            </a>
+        </div>
+    </div>
+
+    <!-- كروت الإحصائيات العلوية -->
+    <div class="row row-cards mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-sm border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي عدد الفواتير</div>
+                    <div class="fw-bold fs-2 text-dark">{{ number_format($invoicesCount) }} <small class="fs-6">فاتورة</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-sm border-0 shadow-sm border-start border-primary border-3">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي قيمة المبيعات</div>
+                    <div class="fw-bold fs-2 text-primary">{{ number_format($totalSalesSum, 2) }} <small class="fs-6">د.ل</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-sm border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted fs-6">المبلغ المحصل الفعلي</div>
+                    <div class="fw-bold fs-2 text-success">{{ number_format($totalPaidSum, 2) }} <small class="fs-6">د.ل</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-sm border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted fs-6">إجمالي الديون (الآجل)</div>
+                    <div class="fw-bold fs-2 text-danger">{{ number_format($totalRemainingSum, 2) }} <small class="fs-6">د.ل</small></div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="card">
+    <!-- بطاقة الفلاتر والبحث -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body bg-light">
+            <form action="{{ route('invoices.index') }}" method="GET" class="row g-3 align-items-end">
+                <!-- البحث -->
+                <div class="col-md-4">
+                    <label class="form-label">بحث برقم الفاتورة أو الزبون</label>
+                    <input type="text" name="search" value="{{ request('search') }}" class="form-control" placeholder="ابحث هنا...">
+                </div>
+
+                <!-- طريقة الدفع -->
+                <div class="col-md-3">
+                    <label class="form-label">طريقة الدفع</label>
+                    <select name="payment_method" class="form-select">
+                        <option value="">جميع الطرق</option>
+                        <option value="cash" {{ request('payment_method') == 'cash' ? 'selected' : '' }}>نقداً (كاش)</option>
+                        <option value="card" {{ request('payment_method') == 'card' ? 'selected' : '' }}>بطاقة</option>
+                        <option value="credit" {{ request('payment_method') == 'credit' ? 'selected' : '' }}>آجل / دين</option>
+                    </select>
+                </div>
+
+                <!-- من تاريخ -->
+                <div class="col-md-2">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="date_from" value="{{ request('date_from') }}" class="form-control">
+                </div>
+
+                <!-- إلى تاريخ -->
+                <div class="col-md-2">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="date_to" value="{{ request('date_to') }}" class="form-control">
+                </div>
+
+                <!-- أزرار البحث -->
+                <div class="col-md-1 d-flex gap-1">
+                    <button type="submit" class="btn btn-primary w-100" title="بحث">بحث</button>
+                    <a href="{{ route('invoices.index') }}" class="btn btn-outline-secondary" title="إعادة تعيين">✖</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- جدول الفواتير -->
+    <div class="card border-0 shadow-sm">
         <div class="table-responsive">
-            <table class="table card-table table-vcenter text-nowrap datatable">
+            <table class="table table-vcenter table-hover card-table">
                 <thead>
                     <tr>
                         <th>رقم الفاتورة</th>
@@ -21,60 +105,41 @@
                         <th>المدفوع</th>
                         <th>طريقة الدفع</th>
                         <th>التاريخ</th>
-                        <th>الإجراءات</th>
+                        <th class="text-center">الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($invoices as $invoice)
+                    @forelse($invoices as $inv)
                         <tr>
-                            <td><span class="badge bg-blue text-white fw-bold">{{ $invoice->invoice_number }}</span></td>
-                            <td>{{ $invoice->customer ? $invoice->customer->name : 'زبون نقدي' }}</td>
-                            <td>{{ number_format($invoice->total_amount, 2) }} د.ل</td>
-                            <td>{{ number_format($invoice->paid_amount, 2) }} د.ل</td>
+                            <td class="fw-bold text-primary">{{ $inv->invoice_number }}</td>
+                            <td>{{ $inv->customer->name ?? 'زبون نقدي' }}</td>
+                            <td class="fw-bold">{{ number_format($inv->total_amount, 2) }} د.ل</td>
+                            <td>{{ number_format($inv->paid_amount, 2) }} د.ل</td>
                             <td>
-                                @php
-                                    $method = strtolower(trim($invoice->payment_method ?? ''));
-                                @endphp
-
-                                @if($method == 'cash')
-                                    <span class="badge bg-success text-white">نقداً</span>
-                                @elseif($method == 'card')
-                                    <span class="badge bg-info text-white">بطاقة</span>
-                                @elseif($method == 'transfer')
-                                    <span class="badge bg-primary text-white">تحويل</span>
-                                @elseif($method == 'credit' || $method == 'debt')
-                                    <span class="badge bg-warning text-dark">آجل / دين</span>
+                                @if($inv->payment_method === 'cash')
+                                    <span class="badge bg-success-lt text-success">نقداً</span>
+                                @elseif($inv->payment_method === 'card')
+                                    <span class="badge bg-info-lt text-info">بطاقة</span>
                                 @else
-                                    <span class="badge bg-secondary">{{ $invoice->payment_method ?? 'غير محدد' }}</span>
+                                    <span class="badge bg-warning-lt text-warning">آجل / دين</span>
                                 @endif
                             </td>
-                            <td>{{ $invoice->created_format ?? $invoice->created_at->format('Y-m-d H:i') }}</td>
-                          <td class="text-end">
-    <!-- زر عرض وطباعة الفاتورة -->
-    <a href="{{ route('invoices.show', $invoice->id) }}" class="btn btn-sm btn-outline-primary me-1" target="_blank">
-        عرض وطباعة
-    </a>
-
-    <!-- زر حذف / إلغاء الفاتورة -->
-    <form action="{{ route('invoices.destroy', $invoice->id) }}" method="POST" class="d-inline-block" onsubmit="return confirm('هل أنت تأكد من إلغاء وحذف هذه الفاتورة؟ سيتم إرجاع الكميات للمخزون.');">
-        @csrf
-        @method('DELETE')
-        <button type="submit" class="btn btn-sm btn-outline-danger">
-            حذف / إلغاء
-        </button>
-    </form>
-</td>
+                            <td class="text-muted">{{ $inv->created_at->format('Y-m-d H:i') }}</td>
+                            <td class="text-center">
+                                <a href="{{ route('invoices.show', $inv->id) }}" target="_blank" class="btn btn-sm btn-outline-primary">عرض وطباعة</a>
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center py-4">لا توجد فواتير مسجلة حتى الآن.</td>
+                            <td colspan="7" class="text-center text-muted py-4">لا توجد فواتير مطابقة للبحث.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+        <!-- روابط التصفح (Pagination) -->
         <div class="card-footer d-flex align-items-center">
-            {{ $invoices->links() }}
+            {!! $invoices->links() !!}
         </div>
     </div>
 </div>

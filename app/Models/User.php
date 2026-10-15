@@ -7,21 +7,19 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Traits\HasRoles; // <-- أضف هذا الاستيراد
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasRoles; // <-- أضف HasRoles هنا
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
+        'role', // يمكنك الاحتفاظ بالحقل القديم مؤقتاً أو الاعتماد على Spatie بالكامل لاحقاً
+        'is_active',
+        'branch_id', // <-- أضف هذا الحقل
     ];
 
     /**
@@ -46,4 +44,9 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function branch()
+{
+    return $this->belongsTo(Branch::class, 'branch_id');
+}
 }

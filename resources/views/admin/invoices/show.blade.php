@@ -2,7 +2,7 @@
 
 @section('content')
 <div class="container-xl">
-    <!-- هيدر الصفحة وأزرار الإجراءات -->
+    <!-- هيدر الصفحة وأزرار الإجراءات (تختفي عند الطباعة) -->
     <div class="page-header d-print-none mb-3">
         <div class="row align-items-center">
             <div class="col">
@@ -28,17 +28,17 @@
     </div>
 
     <!-- بطاقة الفاتورة -->
-    <div class="card card-lg">
+    <div class="card card-lg print-card">
         <div class="card-body">
             <div class="row">
                 <div class="col-6">
-                    <p class="h3">منظومة المبيعات</p>
+                    <p class="h3">{{ $company->name ?? 'منظومة المبيعات' }}</p>
                     <address>
                         {{ $invoice->branch->name ?? 'الفرع الرئيسي' }}<br>
                         التاريخ: {{ $invoice->created_at->format('Y-m-d H:i') }}<br>
                         طريقة الدفع: 
-                        <span class="badge bg-secondary">
-                            {{ $invoice->payment_method == 'cash' ? 'نقداً' : ($invoice->payment_method == 'card' ? 'بطاقة' : ($invoice->payment_method == 'transfer' ? 'تحويل' : 'آجل')) }}
+                        <span class="badge {{ $invoice->payment_method == 'cash' ? 'bg-success text-white' : ($invoice->payment_method == 'card' ? 'bg-info text-white' : 'bg-warning text-dark') }}">
+                            {{ $invoice->payment_method == 'cash' ? 'نقداً' : ($invoice->payment_method == 'card' ? 'بطاقة' : ($invoice->payment_method == 'transfer' ? 'تحويل' : 'آجل / دين')) }}
                         </span>
                     </address>
                 </div>
@@ -86,7 +86,7 @@
                         <td class="text-end">{{ number_format($invoice->paid_amount, 2) }} د.ل</td>
                     </tr>
                     <tr>
-                        <td colspan="4" class="strong text-end">المتبقي / المرجع</td>
+                        <td colspan="4" class="strong text-end">المتبقي </td>
                         <td class="text-end">{{ number_format($invoice->change_amount, 2) }} د.ل</td>
                     </tr>
                 </tbody>
@@ -94,4 +94,32 @@
         </div>
     </div>
 </div>
+
+<!-- تنسيقات مخصصة للطباعة لإخفاء القوائم الجانبية والهيدر -->
+<style>
+@media print {
+    /* إخفاء القائمة الجانبية، الهيدر العام، وأزرار الصفحة */
+    .navbar, .navbar-vertical, .page-header, footer, .d-print-none {
+        display: none !important;
+    }
+    body {
+        background-color: #fff !important;
+        color: #000 !important;
+        margin: 0;
+        padding: 0;
+    }
+    .container-xl {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+}
+</style>
 @endsection

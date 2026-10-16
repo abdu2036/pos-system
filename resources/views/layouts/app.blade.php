@@ -377,7 +377,8 @@
     <!-- Tabler Core JS (محلي بالكامل أوفلاين) -->
     <script src="{{ asset('assets/js/tabler.min.js') }}" defer></script>
     <!-- SweetAlert2 JS (محلي بالكامل أوفلاين) -->
-    <script src="{{ asset('assets/js/sweetalert2.min.js') }}"></script>
+    <script src="{{ asset('assets/js/sweetalert2.min.js') }}"></script>@vite(['src/database/db.js', 'src/services/syncService.js'])
+
 
     <script>
         // 1. دالة استدعاء عامة لاستخدام SweetAlert في أي مكان بالواجهة (AJAX / Fetch)

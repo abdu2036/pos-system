@@ -10,6 +10,7 @@ class Invoice extends Model
     use HasFactory;
 
     protected $fillable = [
+        'uuid',
         'invoice_number',
         'customer_id',
         'branch_id',
@@ -18,6 +19,8 @@ class Invoice extends Model
         'paid_amount',
         'change_amount',
         'payment_method',
+        'is_synced',   // أضف هذا
+        'synced_at',
     ];
 
     /**

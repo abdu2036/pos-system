@@ -11,6 +11,7 @@ use App\Models\TreasuryTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\CompanySetting; // أو نموذج إعدادات الشركة لديك
 
 class PosController extends Controller
 {
@@ -33,7 +34,7 @@ class PosController extends Controller
         return view($viewPath, compact('products', 'customers', 'recentInvoices', 'treasuries'));
     }
 
-    public function store(Request $request)
+public function store(Request $request)
     {
         $request->validate([
             'customer_id' => 'nullable|exists:customers,id',
@@ -118,31 +119,40 @@ class PosController extends Controller
                 }
             }
 
-$year = date('Y');
+            $year = date('Y');
             $latestInvoice = Invoice::where('invoice_number', 'like', "INV-{$year}-%")->latest('id')->first();
             $nextInvNumber = $latestInvoice ? intval(substr($latestInvoice->invoice_number, -4)) + 1 : 1;
             $invoiceNumber = 'INV-' . $year . '-' . str_pad($nextInvNumber, 4, '0', STR_PAD_LEFT);
 
-            // 🕒 1. البحث عن الوردية المفتوحة للمستخدم الحالي والتحقق منها
-            $activeShift = \App\Models\Shift::where('user_id', Auth::id())
-                ->where('status', 'open')
-                ->first();
+            // 🕒 1. التحقق من إعدادات الشركة ونظام الورديات
+            $companySetting = CompanySetting::first();
+            // تحقق من حقل تففعيل الورديات (تأكد من مطابقة اسم العمود في جدول company_settings لديك، مثل shifts_enabled أو enable_shifts)
+            $shiftsEnabled = $companySetting && ($companySetting->shifts_enabled ?? false); 
 
-            // إذا لم تكن هناك وردية مفتوحة، نوقف العملية ونعرس رسالة خطأ واضحة
-            if (!$activeShift) {
-                DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'عذراً، لا توجد وردية مفتوحة حالياً لك. يرجى فتح وردية جديدة قبل إتمام البيع.'
-                ], 400);
+            $activeShiftId = null;
+
+            if ($shiftsEnabled) {
+                $activeShift = \App\Models\Shift::where('user_id', Auth::id())
+                    ->where('status', 'open')
+                    ->first();
+
+                if (!$activeShift) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'عذراً، نظام الورديات مفعل ولا توجد وردية مفتوحة حالياً لك. يرجى فتح وردية جديدة قبل إتمام البيع.'
+                    ], 400);
+                }
+                
+                $activeShiftId = $activeShift->id;
             }
 
-            // 📝 2. إنشاء الفاتورة وربطها بالوردية النشطة بأمان تام
+            // 📝 2. إنشاء الفاتورة مع مراعاة حالة نظام الورديات (مفعل أو معطل)
             $invoice = Invoice::create([
                 'invoice_number' => $invoiceNumber,
                 'customer_id' => $request->customer_id ?? null,
                 'branch_id' => $mainBranch ? $mainBranch->id : null,
-                'shift_id' => $activeShift->id, // 👈 هنا يتم ربط الفاتورة برقم الوردية المفتوحة
+                'shift_id' => $activeShiftId, // 👈 سيكون رقم الوردية إذا كانت مفعلة، أو null إذا كان النظام عادياً بدون ورديات
                 'total_amount' => $totalAmount,
                 'paid_amount' => $actualPaidAmount,
                 'change_amount' => !$isCredit && $actualPaidAmount > $totalAmount ? ($actualPaidAmount - $totalAmount) : 0,
@@ -154,7 +164,6 @@ $year = date('Y');
                 $treasuryId = $request->treasury_id;
                 
                 if (!$treasuryId) {
-                    // إذا كانت بطاقة أو تحويل، نختار حساب البنك تلقائياً، وإلا الخزينة النقدية
                     if (in_array($request->payment_method, ['card', 'transfer'])) {
                         $targetTreasury = Treasury::where('type', 'bank')->first() ?? Treasury::first();
                     } else {

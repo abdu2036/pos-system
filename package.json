@@ -19,6 +19,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
-        "@tabler/core": "^1.6.0"
+        "@tabler/core": "^1.6.0",
+        "dexie": "^4.4.6"
     }
 }

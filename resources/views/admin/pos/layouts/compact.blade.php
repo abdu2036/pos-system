@@ -306,7 +306,26 @@
         </div>
     </div>
 </div>
+<!-- استدعاء مكتبة Dexie.js للتعامل مع IndexedDB -->
+<script src="https://unpkg.com/dexie/dist/dexie.js"></script>
 
+<script>
+    // تعريف متغير db ليصبح عاماً (Global) ومتاحاً لجميع الدوال مثل processCheckout
+    const db = new Dexie('PosOfflineDB');
+    
+    db.version(1).stores({
+        invoices: '++id, uuid, invoice_number, total_amount, payment_method, is_synced, created_at',
+        products: '++id, product_id, name, price, stock',
+        customers: '++id, customer_id, name, phone'
+    });
+
+    // فتح قاعدة البيانات للتأكد من ظهورها في المتصفح
+    db.open().then(() => {
+        console.log("تم تفعيل IndexedDB بنجاح وأصبحت جاهزة للاستخدام!");
+    }).catch(err => {
+        console.error("خطأ أثناء فتح قاعدة البيانات المحلية:", err);
+    });
+</script>
 <script>
 let cart = [];
 let currentPriceType = 'retail';
@@ -535,7 +554,7 @@ function saveQuickCustomer() {
     .catch(err => Swal.fire({ icon: 'error', title: 'خطأ', text: err.message }));
 }
 
-function processCheckout() {
+async function processCheckout() {
     if (cart.length === 0) {
         Swal.fire({ icon: 'warning', title: 'السلة فارغة', text: 'يرجى إضافة منتجات إلى السلة أولاً!' });
         return;
@@ -544,37 +563,114 @@ function processCheckout() {
     let customerId = document.getElementById('customer-id').value;
     let paymentMethod = document.getElementById('payment-method').value;
     let paidAmount = parseFloat(document.getElementById('paid-amount').value) || 0;
+    let grandTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    let changeAmount = paidAmount - grandTotal;
 
     if (paymentMethod === 'credit' && !customerId) {
         Swal.fire({ icon: 'warning', title: 'زبون غير محدد', text: 'اختر زبون مسجل لإتمام البيع بالأجل!' });
         return;
     }
 
-    fetch("{{ route('pos.store') }}", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": "{{ csrf_token() }}" },
-        body: JSON.stringify({ customer_id: customerId, items: cart, price_type: currentPriceType, paid_amount: paidAmount, payment_method: paymentMethod })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            Swal.fire({
-                icon: 'success',
-                title: 'تم حفظ الفاتورة بنجاح!',
-                text: 'رقم الفاتورة: ' + data.invoice_number,
-                showCancelButton: true,
-                confirmButtonText: 'طباعة',
-                cancelButtonText: 'جديدة'
-            }).then((result) => {
-                if (result.isConfirmed) window.open('/invoices/' + data.invoice_id + '/print', '_blank');
-                cart = [];
-                location.reload();
+    // تجهيز هيكل بيانات الفاتورة الموحد
+    let invoiceData = {
+        uuid: crypto.randomUUID(),
+        invoice_number: 'INV-' + Math.floor(100000 + Math.random() * 900000),
+        customer_id: customerId ? parseInt(customerId) : null,
+        total_amount: grandTotal,
+        paid_amount: paidAmount,
+        change_amount: changeAmount >= 0 ? changeAmount : 0,
+        payment_method: paymentMethod,
+        items: cart.map(item => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            price: item.price
+        }))
+    };
+
+    // 1. التحقق من حالة الاتصال بالإنترنت
+    if (navigator.onLine) {
+        try {
+            let res = await fetch("{{ route('pos.store') }}", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json", 
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": "{{ csrf_token() }}" 
+                },
+                body: JSON.stringify({ 
+                    customer_id: customerId, 
+                    items: cart, 
+                    price_type: currentPriceType, 
+                    paid_amount: paidAmount, 
+                    payment_method: paymentMethod 
+                })
             });
-        } else {
-            Swal.fire({ icon: 'warning', title: 'تعذر إتمام العملية', text: data.message });
+            let data = await res.json();
+
+            if (data.success) {
+                // طباعة هادئة ومباشرة عبر iframe المخفي
+                let printFrame = document.getElementById('print-frame');
+                printFrame.src = '/invoices/' + data.invoice_id + '/print';
+
+                printFrame.onload = function() {
+                    try {
+                        printFrame.contentWindow.focus();
+                        printFrame.contentWindow.print();
+                    } catch (e) {
+                        console.error("خطأ في الطباعة المباشرة:", e);
+                    }
+                };
+
+                resetCartAndUI('تم حفظ وطباعة الفاتورة #' + data.invoice_number, 'success');
+                return;
+            }
+        } catch (e) {
+            console.warn("فشل الاتصال المباشر بالسيرفر، سيتم الحفظ محلياً...", e);
         }
-    })
-    .catch(() => Swal.fire({ icon: 'error', title: 'خطأ في الاتصال' }));
+    }
+
+    // 2. حالة الانقطاع (أوفلاين) -> الحفظ في IndexedDB محلياً
+    try {
+        // تأكد من استيراد db أو استخدامها إذا كانت معرفة عالمياً، أو حفظها عبر Dexie مباشرة:
+        await db.invoices.add({
+            uuid: invoiceData.uuid,
+            invoice_number: invoiceData.invoice_number,
+            customer_id: invoiceData.customer_id,
+            total_amount: invoiceData.total_amount,
+            paid_amount: invoiceData.paid_amount,
+            change_amount: invoiceData.change_amount,
+            payment_method: invoiceData.payment_method,
+            items: invoiceData.items,
+            is_synced: false, // مؤشر أنها معلقة بانتظار عودة النت
+            created_at: new Date().toISOString()
+        });
+
+        resetCartAndUI('⚠️ أوفلاين! تم حفظ الفاتورة محلياً وسيتم مزامنتها تلقائياً لاحقاً.', 'warning');
+
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'خطأ في التخزين المحلي', text: err.message });
+    }
+}
+
+// دالة مساعدة لتفريغ السلة وإعادة تهيئة الفوكس للبحث
+function resetCartAndUI(message, iconType) {
+    cart = [];
+    updateCartUI();
+
+    let searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+    }
+
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true
+    });
+    Toast.fire({ icon: iconType, title: message });
 }
 
 document.addEventListener('keydown', function(e) {
